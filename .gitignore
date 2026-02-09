@@ -1,35 +1,26 @@
-HELP.md
+cat > .gitignore <<EOF
+# --- 常用 Java/Maven 忽略项 ---
 target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+*.class
+*.log
+logs/
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# --- IDE 配置文件 (不需要上传) ---
+.idea/
 *.iml
 *.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+*.iws
 .vscode/
+
+# --- macOS 系统文件 ---
 .DS_Store
-*/.DS_Store
+
+# --- 本项目特定忽略项 ---
+# 忽略测试生成的 token 文件
+src/test/java/com/hmdp/tokens.txt
+# 如果你想忽略所有测试生成的临时 txt 文件，也可以写 *.txt
+
+# --- 敏感信息 (防止误传) ---
+# 真正的密钥配置文件建议忽略，但这只是学习项目，application.yaml 可以留着
+# config/application-prod.yaml
+EOF
