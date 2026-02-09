@@ -1,0 +1,48 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: hmdp
+
+  # RabbitMQ 配置
+  rabbitmq:
+    listener:
+      simple: # 对应 SimpleRabbitListenerContainerFactory
+        acknowledge-mode: auto # 自动确认：方法正常执行完发Ack，抛异常发Nack
+        retry:
+          enabled: true # 【关键】开启 Spring 内部的本地重试
+          initial-interval: 1000ms # 第一次失败等 1秒
+          multiplier: 2 # 每次失败间隔乘 2
+          max-attempts: 3 # 最多试 3 次 (含第1次)
+          stateless: true # true代表不开启事务(性能好)，false代表开启事务
+
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/hmdp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowMultiQueries=true
+    username: root
+    password: fl12138bb../
+
+  # Redis 配置 (重点修改部分)
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      lettuce:
+        pool:
+          max-active: 30
+          max-idle: 15
+          min-idle: 5
+          time-between-eviction-runs: 10s
+
+  # Jackson 配置
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  type-aliases-package: com.hmdp.entity
+
+logging:
+  level:
+    com.hmdp: debug
