@@ -2,8 +2,8 @@
 
 > 评审对象：`doc/01~03_MeetMate_*.md`（前端 / Java 后端 / Python Agent）v1.0
 > 评审角色：Software Architect
-> 结论：**方向正确，质量高于同类教学/副业项目；存在 3 个 P0 级设计缺口，需在动手前补完**
-> **状态更新（2026-07-11）**：R1/R2/R3 与 P1 投票规则、FINALIZED 局部重规划、shop_meet_meta 治理、Checkpoint 隔离均已由用户正式拍板，并回写进三份设计稿 **v1.1**（§32~§35 R3/R1/R2/ADR-001~004）。本报告中的 R1~R12 视为已闭环，R10 状态冗余问题随 WAITING_* 合并为单一 WAITING_INPUT 解决。
+> 结论（v1.0 首评）：**方向正确，质量高于同类教学/副业项目；存在 3 个 P0 级设计缺口，需在动手前补完**（已于 v1.1 拍板、v1.2 落地）
+> **状态更新（2026-07-11 二次评审）**：三份设计稿已升 **v1.2**，补齐轮次实体、澄清多回答模型、澄清内部接口、可靠 resume 投递、candidateId 绑定、状态机冲突修正、Checkpoint 配置统一、shop_meet_meta 治理与种子数据。R1~R3 与 P1 投票/局部重规划/Checkpoint 已 **RESOLVED**；R7/R12 **PARTIAL**（种子数据待落地、CI 双向契约校验待落实）；R8/R9 已在 v1.2 文档补充（**RESOLVED**）；R11 仍为 **OPEN**（无 OTel）。下方风险表新增「状态」列，本评审不再宣称"R1~R12 全部闭环"。
 
 ---
 
@@ -36,22 +36,24 @@
 
 ## 三、风险登记（按严重度）
 
-| ID | 严重度 | 区域 | 问题 | 建议 |
-|----|--------|------|------|------|
-| R1 | **P0** | 编排时序 | Java 调 Python 是"异步长任务 + 可中断 + 需用户补信息"的组合，但三份文档只定义了组件，未定义**端到端时序契约**：Python 进入 `WAITING_*` 后，如何把"待澄清问题"落到前端、前端作答后如何 `resume` 回 Python。 | 定义 `WAITING_INPUT` 进度事件的载荷（问题类型/选项/截止时间），Java 落"pending clarification"并暴露 `GET/POST /clarifications`；用户作答后 Java 调 `Python resume`。见第四节 ADR-2。 |
-| R2 | **P0** | 评分归属 | Java（§16）是群体分/公平性/成员分的**权威**计算方；但 Python 的 `ProposalSuggestion.member_matches[].score` 也允许 LLM 填数字。两份分数可能不一致，前端不知信谁。 | **Java 独占所有数值评分**；Python 只回传 `shopId + 定位 + 解释 + 成员匹配文本`，数值在 Java 落库时由 §16 计算覆盖。见 ADR-1。 |
-| R3 | **P0** | 时间驱动状态 | `preferenceDeadline` / `votingDeadline` 之后的 `EXPIRED` 转换没有调度器。无 scheduler / 延时消息，房间永远不会过期。 | 增加 Spring `@Scheduled` 或 RabbitMQ 延时消息，定期扫描超时房间/投票并转 `EXPIRED`；同时驱动前端倒计时。 |
-| R4 | P1 | 状态机 | 前端 §7.9 支持 FINALIZED 上"发起局部替换"，但 Java §8 状态机 **没有 `FINALIZED → REPLANNING` 边**。 | 补一条 `FINALIZED --> REPLANNING` 转换（带版本号递增）。 |
-| R5 | P1 | 投票规则 | `voting_rule` 字段存在，但"通过条件""排名+否决如何合成胜者""单个否决是否整轮失败"均未定义——这是核心业务规则。 | 明确 `voting_rule` 枚举（如 MAJORITY / UNANIMOUS / VETO_BLOCKS）与聚合算法，写进 ADR。 |
-| R6 | P1 | Checkpoint 存储 | Python"不连 MySQL"成立，但 LangGraph Checkpointer 需存储（env 写 `postgres_or_redis`）。是否复用 Java 的 Redis？"无 DB"边界需澄清。 | 复用独立 Redis DB（或 Java Redis 的专用 namespace），明确与"无 MySQL"不冲突；禁止 Python 读写业务表。 |
-| R7 | P1 | 数据ootstrap | `tb_shop_meet_meta`（辣度/地铁距离/过敏标签/营业时间）是硬约束的燃料，但**数据来源未定义**（人工 seed？外部 API？）。缺它硬过滤形同虚设。 | 明确数据来源与初始化脚本；MVP 可先接受"无 meta 则跳过该项硬约束"的降级。 |
-| R8 | P2 | Nginx | SSE 经 Nginx 需 `proxy_buffering off` + 较长 `proxy_read_timeout`，文档未提。 | 部署文档补 Nginx SSE 配置。 |
-| R9 | P2 | 部署 | 新前端目录为 `web/`（旧 `frontend/` → `frontend-legacy/`），`docker-compose.yml` 仍引用 `frontend`，需同步改名。 | 更新 compose 的 build 上下文与 nginx `/api` 反代目标（`java-app:8081`）。 |
-| R10 | P2 | 状态机冗余 | AgentRun 的 `WAITING_VOTE_RESULT` 语义不清——投票是 Java 主导的用户阶段，Python 不应"等投票"。疑似死状态。 | 若无"投票后由 Python 生成终稿"的明确用途，删除该状态。 |
-| R11 | P2 | 可观测性 | 仅有结构化日志 + requestId，无分布式追踪（OTel）。跨 Java/Python 排障靠日志拼接。 | 后期引入 OpenTelemetry，首期可接受。 |
-| R12 | P2 | 契约测试 | 双向 OpenAPI 契约已提，但未明确"Java 与 Python 各自发布 schema，对方据此做契约测试"的对等动作。 | 约定双方向各发布 OpenAPI/JSON Schema，CI 双向校验。 |
+| ID | 严重度 | 区域 | 问题 | 建议（v1.2 落地） | 状态 |
+|----|--------|------|------|------|------|
+| R1 | **P0** | 编排时序 | 跨服务澄清时序契约缺失 | `WAITING_INPUT` 结构化问题 + clarification API + Java 持有 HITL + Python 挂起（§33/ADR-002） | RESOLVED |
+| R2 | **P0** | 评分归属 | 双份分数冲突 | Java 独占评分，Python 输出禁 score，Ranking Snapshot 防漂移（§34/ADR-001） | RESOLVED |
+| R3 | **P0** | 时间驱动 | 无调度器房间不过期 | Guard + `@Scheduled` 扫描 + Agent 超时按 runType 补偿（§32/ADR-003） | RESOLVED |
+| R4 | P1 | 状态机 | FINALIZED 缺重规划边 | `FINALIZED → REPLAN_PENDING → REPLANNING`，补恢复边（§8） | RESOLVED |
+| R5 | P1 | 投票规则 | 通过/否决算法未定义 | 多数制单选择，floor(N/2)+1（ADR-004） | RESOLVED |
+| R6 | P1 | Checkpoint | 存储与无 DB 边界 | Redis 独立 client/ACL/prefix/TTL + 固定配置（§17/§28） | RESOLVED |
+| R7 | P1 | 数据 bootstrap | meta 来源与 UNKNOWN 未定义 | 来源枚举 + UNKNOWN 按字段处理 + 种子脚本位置（§10.8.1） | PARTIAL（种子数据待实际落地） |
+| R8 | P2 | Nginx | SSE 缓冲未关 | 部署文档补 `proxy_buffering off` + 长 timeout（前端 §20） | RESOLVED |
+| R9 | P2 | 部署 | compose 仍引 frontend | 明确 build context 指向 `web/`，nginx 反代 `java-app:8081`（Java §29） | RESOLVED |
+| R10 | P2 | 状态机冗余 | WAITING_VOTE_RESULT 死状态 | 合并为单一 `WAITING_INPUT`（v1.1） | RESOLVED |
+| R11 | P2 | 可观测性 | 无 OTel | 仍仅结构化日志 + requestId，OTel 留后期 | OPEN（接受风险） |
+| R12 | P2 | 契约测试 | CI 双向校验未落实 | 双向 OpenAPI/JSON Schema 已定义，CI 校验待落实 | PARTIAL |
 
 ---
+
+> **v1.2 状态**：以下两份建议在 v1.1 已升级为 Java 文档中的 **ADR-001（评分归属）** 与 **ADR-002（HITL 编排）**，并随 v1.2 补充了澄清内部接口（§18.3）、可靠 resume 投递（§33.6）、candidateId 绑定等落地细节，状态 **RESOLVED**。
 
 ## 四、建议补的两份 ADR
 
@@ -74,17 +76,17 @@
 
 ---
 
-## 五、动手前应先拍板的开放问题
+## 五、动手前应先拍板的开放问题（v1.2 已全部闭环）
 
-1. 澄清（clarification）交互的数据契约长什么样？（R1/ADR-2）
-2. `voting_rule` 的取值与通过/否决聚合算法？（R5）
-3. 硬约束所需的 `tb_shop_meet_meta` 从哪来、MVP 缺数据时如何降级？（R7）
-4. Checkpoint 是否复用 Java 的 Redis，namespace 如何隔离？（R6）
-5. 过期/倒计时由谁驱动（scheduler vs 延时 MQ）？（R3）
-6. Python 是否真的需要 `WAITING_VOTE_RESULT`？（R10）
+1. 澄清交互数据契约（R1/ADR-2）—— ✅ 已定义 `WAITING_INPUT` + `tb_meet_clarification` + clarification API + `request_clarification` 内部接口 + ResumeDispatcher。
+2. `voting_rule` 取值与聚合算法（R5）—— ✅ 冻结为 `SUPPORT`/`REJECT_ALL`/`ABSTAIN` 多数制（ADR-004）。
+3. `tb_shop_meet_meta` 来源与降级（R7）—— ✅ 来源枚举 + UNKNOWN 按字段处理 + 种子脚本位置已定义（种子数据待落地）。
+4. Checkpoint 是否复用 Java Redis、namespace（R6）—— ✅ 复用 Redis 独立 client/ACL/prefix/TTL，配置固定为 redis（§17/§28）。
+5. 过期/倒计时驱动方（R3）—— ✅ Guard + `@Scheduled` 扫描双保险，暂不用延时 MQ。
+6. Python 是否需要 `WAITING_VOTE_RESULT`（R10）—— ✅ 删除，合并为单一 `WAITING_INPUT`。
 
 ---
 
 ## 六、评审结论
 
-计划**合理且可落地**，不需要推翻重来。优先在编码前补完 R1/R2/R3 三处 P0（编排时序、评分归属、时间调度），并在设计文档中显式回答第五节 6 个问题。其余 P1/P2 可在实现对应模块时按需补全。
+计划**合理且可落地**，不需要推翻重来。v1.1 已拍板 R1/R2/R3 与 P1 投票/局部重规划/Checkpoint/评分归属，v1.2 已补齐轮次实体、澄清多回答模型与可靠 resume 投递、candidateId 绑定、状态机冲突与 Checkpoint 配置。**当前可进入 P0 基线（基线修复 + 建表）开发**；但 R7（种子数据实际落地）、R11（OTel）、R12（CI 双向契约校验）仍为 PARTIAL/OPEN，需在对应模块实现时补全——不属于编码前阻塞项。

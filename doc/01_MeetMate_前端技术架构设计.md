@@ -3,7 +3,7 @@
 > 文档类型：前端技术架构  
 > 适用项目：`fffflllll/yun-dp` 增量改造为 MeetMate  
 > 技术方向：Vue 3 + TypeScript + Vite  
-> 文档版本：v1.1
+> 文档版本：v1.2
 
 ---
 
@@ -19,6 +19,7 @@
 > - R3 截止时间 —— 倒计时由 Java 状态驱动，前端只读展示（见 ADR-003）；
 > - P1 投票冻结为多数制单选择 `SUPPORT` / `REJECT_ALL` / `ABSTAIN`，去掉排序投票 UI（见 §7.8、ADR-004）；
 > - P1 FINALIZED 局部重规划经 `REPLAN_PENDING`，创建 `LOCAL_REPLAN` 任务，旧方案确认前保持有效（见 §7.4、§7.9）。
+> - **v1.2 修订（基于二次评审）**：澄清契约收敛为 MVP 方案 A（`USER`/`OWNER`，群体澄清由 Java 为每位成员各建一条）；补充 Nginx SSE 反代配置（`proxy_buffering off` + 长 `proxy_read_timeout`，R8）；校正 `REPLAN_PENDING → FINALIZED` / `REPLANNING → FINALIZED` 恢复边引用。
 
 1. 用户登录；
 2. 创建或加入聚会房间；
@@ -554,7 +555,7 @@ interface AgentProgressEvent {
 // 结构化澄清问题，前端按 answerType 选择控件，不解析自然语言
 interface ClarificationPayload {
   clarificationId: string
-  targetType: 'USER' | 'OWNER' | 'ALL_MEMBERS' | 'ANY_MEMBER'
+  targetType: 'USER' | 'OWNER'        // MVP 方案 A：仅 USER/OWNER；群体澄清由 Java 为每位成员各建一条
   targetUserId?: number
   questionCode: string
   title: string
@@ -565,11 +566,11 @@ interface ClarificationPayload {
   options?: { value: string; label: string }[]
   validation?: { required?: boolean; [k: string]: unknown }
   expiresAt?: string
-  resumePolicy: 'IMMEDIATE' | 'ALL_REQUIRED_ANSWERED' | 'OWNER_CONFIRMATION'
+  resumePolicy: 'IMMEDIATE' | 'OWNER_CONFIRMATION'
 }
 ```
 
-> `WAITING_INPUT` 事件必须携带可渲染的结构化 `clarification`，前端据此弹出对应控件（下拉、文本、数字、时间、位置等），**不得**把 `message` 当自然语言去解析（R1，ADR-002）。
+> `WAITING_INPUT` 事件必须携带可渲染的结构化 `clarification`，前端据此弹出对应控件（下拉、文本、数字、时间、位置等），**不得**把 `message` 当自然语言去解析（R1，ADR-002）。MVP 群体澄清表现为多条 clarification（每位成员一条），前端按 `targetUserId` 过滤出当前用户待答列表。
 
 ## 断线重连
 
@@ -675,7 +676,7 @@ C：预算或口味最优
 
 - 旧最终方案在新方案确认前仍然有效，不直接覆盖；
 - 新方案生成后由用户确认，确认成功 `final_plan.version + 1`；
-- 失败或取消则恢复 `FINALIZED`（见 Java 文档 §8、ADR 未编号 P1 局部重规划决策）。
+- 失败或取消则恢复 `FINALIZED`（见 Java 文档 §8 状态机恢复边 `REPLAN_PENDING → FINALIZED` / `REPLANNING → FINALIZED`）。
 
 ---
 
@@ -1199,7 +1200,21 @@ Nginx：
 
 ```text
 /           → Vue 静态资源
-/api/**     → Spring Boot
+/api/**     → Spring Boot（含 SSE 流）
+```
+
+SSE 反代必须关闭缓冲并放宽超时（避免进度流被 Nginx 缓冲、连接被早断）：
+
+```nginx
+location /api/ {
+    proxy_pass http://java-app:8081;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    chunked_transfer_encoding on;
+}
 ```
 
 前端不代理到 Python。
@@ -1279,7 +1294,8 @@ VITE_LOG_LEVEL=info
 14. 实现局部替换 LOCAL_REPLAN 流程；
 15. 增加错误边界；
 16. 增加单元测试与 E2E；
-17. 完成 Nginx 部署。
+17. 完成 Nginx 部署（含 SSE `proxy_buffering off`，R8）；
+18. 澄清作答支持多成员各自一条 clarification（MVP 方案 A，§7.6）。
 
 ---
 
