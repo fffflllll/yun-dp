@@ -1,7 +1,6 @@
 # ============================================================
-# 黑马点评 (hmdp) —— 仅用 Docker 跑：前端 + MySQL + Redis + RabbitMQ
+# 仅用 Docker 跑：前端 + MySQL + Redis + RabbitMQ
 # 后端 (backend/) 由你在 IDEA 手动启动，激活 local profile 即可连到这里的容器。
-#
 # 启动：在 backend/ 目录执行  docker compose up -d
 # 停止：docker compose down          （加 -v 可同时删库，慎用）
 # 查看日志：docker compose logs -f <服务名>
