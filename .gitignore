@@ -28,3 +28,6 @@ logs/
 *.zip
 *.tar.gz
 *.rar
+
+# AI 工作记忆（不进版本库）
+.workbuddy/
