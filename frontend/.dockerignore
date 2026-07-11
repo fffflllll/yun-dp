@@ -1,0 +1,5 @@
+# 排除不需要打进镜像的文件
+.git
+Dockerfile
+.dockerignore
+docker-compose.yml

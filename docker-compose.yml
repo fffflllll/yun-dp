@@ -1,0 +1,95 @@
+# ============================================================
+# 黑马点评 (hmdp) —— 仅用 Docker 跑：前端 + MySQL + Redis + RabbitMQ
+# 后端 (backend/) 由你在 IDEA 手动启动，激活 local profile 即可连到这里的容器。
+#
+# 启动：在 backend/ 目录执行  docker compose up -d
+# 停止：docker compose down          （加 -v 可同时删库，慎用）
+# 查看日志：docker compose logs -f <服务名>
+# ============================================================
+
+networks:
+  dp-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+
+services:
+  # ---------- MySQL ----------
+  mysql:
+    image: mysql:8.0
+    container_name: hmdp-mysql
+    restart: unless-stopped
+    networks: [dp-net]
+    ports:
+      # 注意：先把本机 Homebrew MySQL 停掉/卸载，否则 3306 被占用会绑定失败
+      #   brew services stop mysql && brew uninstall mysql
+      - "3306:3306"            # 映射到宿主机，IDEA 后端用 localhost:3306 连
+    environment:
+      MYSQL_ROOT_PASSWORD: "123"
+      MYSQL_DATABASE: "hmdp"   # 自动建库，hmdp.sql 会导入到该库
+      TZ: "Asia/Shanghai"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      # 首次启动自动执行建表/插数据（只在库为空时跑一次）
+      - ./src/main/resources/db/hmdp.sql:/docker-entrypoint-initdb.d/hmdp.sql:ro
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Redis ----------
+  redis:
+    image: redis:7-alpine
+    container_name: hmdp-redis
+    restart: unless-stopped
+    networks: [dp-net]
+    ports:
+      - "6379:6379"            # 映射到宿主机，IDEA 后端用 localhost:6379 连
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- RabbitMQ (你的 MQ) ----------
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hmdp-rabbitmq
+    restart: unless-stopped
+    networks: [dp-net]
+    ports:
+      - "5672:5672"            # AMQP 端口，IDEA 后端用 localhost:5672 连
+      - "15672:15672"          # 管理后台 http://localhost:15672  (root / 123321)
+    environment:
+      RABBITMQ_DEFAULT_USER: "root"
+      RABBITMQ_DEFAULT_PASS: "123321"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ---------- 前端 (nginx 静态站点，不含后端) ----------
+  frontend:
+    build: ./frontend
+    container_name: hmdp-frontend
+    restart: unless-stopped
+    networks: [dp-net]
+    ports:
+      - "8080:80"              # 访问 http://localhost:8080
+    # 让容器内可通过 host.docker.internal 访问宿主机（IDEA 里的后端 :8081）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 前端只依赖宿主机上的后端，不依赖下面这些容器，无需 depends_on
