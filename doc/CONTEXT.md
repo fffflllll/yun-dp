@@ -2,7 +2,7 @@
 
 > 本文档由 `grill-with-docs` 会话逐步沉淀，记录"我们到底为什么做、做成什么样"的共识。
 > 与 `ADR-001~004`（技术冻结决策）互为补充：ADR 记"怎么切"，本文记"为什么切 / 交付什么"。
-> 状态：进行中（grilling 未完成，未达成整体共识前不落地实现）。
+> 状态：共识已达成，工单已发布至 `.scratch/meetmate-mvp/issues/`（见 `INDEX.md`），待 `/implement` 沿依赖执行。
 
 ---
 
@@ -56,7 +56,7 @@
 ### D7 — MVP 最薄纵切（2026-07-12）
 - **结论**：H1 — 1 房间 + 2 冲突成员(A 火锅/D 不吃) + 1 次真 LLM 规划 + 1 次澄清挂起/恢复 + 出方案。
 - **砍掉（推 v2）**：投票、重规划、多轮、完整评测集；仅留 Fake-LLM 单测保底。
-- **前端**：不新造 Vue 工程，复用 hmdp 现有页面或极简触发/观察页。精力压在 Agent 主链。
+- **前端**：不建设完整产品前端，但建立**最小 Vue3 Demo Shell**（`web/`，单页演示）；不做通用组件库 / 完整样式系统 / 正式页面迁移。精力压在 Agent 主链。（覆盖早前"不新造 Vue 工程"措辞）
 - **规模预期**：几百行核心即可 demo 出 G2 全貌。
 
 ---
@@ -86,9 +86,24 @@
 | D4 | 面向角色 | AI/Agent 工程师向（Java 作佐证） |
 | D5 | 演示形态 | 真实 LLM 端到端跑通（风险自担） |
 | D6 | wow | 会主动问人的多人在环 Agent（HITL 澄清挂起/恢复） |
-| D7 | MVP 纵切 | 1房间+2冲突成员+1次真LLM规划+1次澄清挂起恢复+出方案；砍投票/重规划/多轮/评测集 |
+| D7 | MVP 纵切 | 1房间+2冲突成员+1次真LLM规划+1次澄清挂起恢复+出方案；砍投票/重规划/多轮/评测集；前端=最小Vue3 Demo Shell |
 | D8 | 来源 | 基于 hmdp/yun-dp 增量改造 |
 | D9 | 技术栈 | LangGraph 锁死，其余弹性 |
 
 **MVP 硬验收**：真实 LLM 下，一次跑通完整链路（含一次真实的 clarification 挂起 + resume 恢复），并留有 Fake-LLM 单测保底。
-**明确不做（v2+）**：投票、重规划、多轮、完整评测集、第二实现证可替换、新造 Vue 工程。
+**明确不做（v2+）**：投票、重规划、多轮、完整评测集、第二实现证可替换、完整 Vue3 产品前端（仅保留最小 Demo Shell）。
+
+---
+
+## 工单复审修订（2026-07-12 晚）
+
+用户复审 `.scratch/meetmate-mvp/issues/` 后确认整体可用（≈90%），并落定 5 个必须修正 + 7 个优化，均已写入工单，此处记锚点：
+
+**必须修正（已落地）：**
+1. **06 澄清语义闭环**：原 `ASK_A_RELAX/ASK_D_RELAX` 房主选"去问 A"并不等于 A 同意放宽。改为 MVP 让 **A=房主**，澄清直接问 A：`RELAX_OWNER_HARD_FOOD_CATEGORY` → `RELAX_TO_SOFT` / `CANCEL_PLAN`，一轮即解除双 HARD 冲突。
+2. **05 可靠启动改为 DB Dispatcher**：原"写库后发 MQ"有事务缺口。改为 `tb_meet_agent_run` 增 `dispatch_status/dispatch_attempts/next_dispatch_at/dispatch_error`，AgentRunDispatcher 轮询 PENDING→调 Python→ACKED，退避重试；MVP 不引 Outbox+MQ，与 06 ResumeDispatcher 同构。
+3. **06 Resume 表字段补齐**：增 `answer_json/answered_by/answered_at/version/resume_status(NOT_READY/PENDING/DISPATCHING/ACKED/FAILED)/resume_attempts/next_retry_at/resume_error`；幂等键 = `clarificationId + answerVersion`。
+4. **CONTEXT ↔ 08 前端冲突**：CONTEXT 原写"不新造 Vue 工程"，与 08 的 Vue3 `web/` 矛盾。拍板保留最小 Vue3 Demo Shell，更新 CONTEXT D7 / 共识表 / 明确不做清单。
+5. **02 商铺坐标错位**：`x/y/avg_price` 属 `tb_shop` 基础字段，移出 `tb_shop_meet_meta`；meta 仅放 `tags_json/spicy_level/business_hours_json/allergen_tags_json/source/confidence`；种子同时写两表，至少 5~8 家、3+ 家过澄清后硬约束。
+
+**优化（已落地）：** 07 与 06 可并行（07 Blocked by 05，E2E 验收卡 06）；INDEX 措辞改为"增量可验证工单"而非"每张都是最薄纵切"；状态拆 `Spec READY` + `Execution BLOCKED/READY`；04 偏好表增 `confirmed_json/status/parser_version/version`；03 增 Java→Python 服务签名校验（X-Service-*，规范在 01）；05 的 interrupt 测试移至 06；08 "最终方案"改为"候选方案/推荐方案列表"。
