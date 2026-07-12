@@ -29,7 +29,6 @@ public class SeckillVoucherListener {
         try {
             // 调用业务层下单
             voucherOrderService.handleVoucherOrder(voucherOrder);
-            System.out.println(1/0);
             log.info("下单成功，订单ID: {}", voucherOrder.getId());
         } catch (Exception e) {
             log.error("下单处理异常，准备重试。订单ID: {}", voucherOrder.getId(), e);
