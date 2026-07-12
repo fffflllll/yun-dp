@@ -11,6 +11,10 @@ public class MeetMemberVO {
 
     private Long userId;
 
+    private String nickName;
+
+    private String icon;
+
     private String role;
 
     private String status;

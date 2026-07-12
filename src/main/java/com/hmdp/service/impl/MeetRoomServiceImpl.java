@@ -7,12 +7,14 @@ import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.MeetMember;
 import com.hmdp.entity.MeetRoom;
+import com.hmdp.entity.User;
 import com.hmdp.enums.MeetMemberRole;
 import com.hmdp.enums.MeetMemberStatus;
 import com.hmdp.enums.MeetPreferenceStatus;
 import com.hmdp.enums.MeetRoomStatus;
 import com.hmdp.mapper.MeetMemberMapper;
 import com.hmdp.mapper.MeetRoomMapper;
+import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IMeetRoomService;
 import com.hmdp.vo.CreateMeetRoomResponse;
 import com.hmdp.vo.MeetMemberVO;
@@ -26,6 +28,9 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 聚会房间业务实现。
@@ -49,6 +54,9 @@ public class MeetRoomServiceImpl
 
     @Resource
     private MeetMemberMapper meetMemberMapper;
+
+    @Resource
+    private UserMapper userMapper;
 
     /**
      * 创建房间。
@@ -229,7 +237,7 @@ public class MeetRoomServiceImpl
                 );
 
         /*
-         * 已经是有效成员时直接返回成功。
+         * 已经是有效成员时直接返回成功（含房间ID，便于前端跳转）。
          *
          * 这样即使前端重复点击加入按钮，也不会重复插入数据。
          */
@@ -237,7 +245,7 @@ public class MeetRoomServiceImpl
                 && MeetMemberStatus.JOINED.name()
                 .equals(existingMember.getStatus())) {
 
-            return Result.ok();
+            return Result.ok(room.getId());
         }
 
         /*
@@ -286,7 +294,7 @@ public class MeetRoomServiceImpl
                 throw new RuntimeException("恢复房间成员失败");
             }
 
-            return Result.ok();
+            return Result.ok(room.getId());
         }
 
         /*
@@ -312,7 +320,7 @@ public class MeetRoomServiceImpl
             throw new RuntimeException("加入聚会房间失败");
         }
 
-        return Result.ok();
+        return Result.ok(room.getId());
     }
 
     /**
@@ -367,9 +375,21 @@ public class MeetRoomServiceImpl
                                 )
                 );
 
+        /*
+         * 一次性批量查询所有成员的用户信息（昵称 + 头像），
+         * 避免逐个成员查库导致的 N+1 问题。
+         */
+        Map<Long, User> userMap = memberEntities.stream()
+                .map(MeetMember::getUserId)
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        userId -> userMapper.selectById(userId),
+                        (a, b) -> a
+                ));
+
         List<MeetMemberVO> memberVOList =
                 memberEntities.stream()
-                        .map(this::convertToMemberVO)
+                        .map(m -> convertToMemberVO(m, userMap))
                         .toList();
 
         MeetRoomDetailVO roomDetail =
@@ -536,10 +556,15 @@ public class MeetRoomServiceImpl
      * 将数据库实体转换成接口返回对象。
      */
     private MeetMemberVO convertToMemberVO(
-            MeetMember member) {
+            MeetMember member,
+            Map<Long, User> userMap) {
+
+        User user = userMap.get(member.getUserId());
 
         return MeetMemberVO.builder()
                 .userId(member.getUserId())
+                .nickName(user != null ? user.getNickName() : null)
+                .icon(user != null ? user.getIcon() : null)
                 .role(member.getRole())
                 .status(member.getStatus())
                 .preferenceStatus(
