@@ -1,7 +1,7 @@
 package com.hmdp.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.hmdp.dto.CreateMeetRoomRequest;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
@@ -13,12 +13,14 @@ import com.hmdp.enums.MeetMemberStatus;
 import com.hmdp.enums.MeetPreferenceStatus;
 import com.hmdp.enums.MeetRoomStatus;
 import com.hmdp.mapper.MeetMemberMapper;
+import com.hmdp.mapper.MeetPlanRunMapper;
 import com.hmdp.mapper.MeetRoomMapper;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IMeetRoomService;
 import com.hmdp.vo.CreateMeetRoomResponse;
 import com.hmdp.vo.MeetMemberVO;
 import com.hmdp.vo.MeetRoomDetailVO;
+import com.hmdp.vo.MeetRoomSummaryVO;
 import com.hmdp.utils.UserHolder;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
@@ -57,6 +60,9 @@ public class MeetRoomServiceImpl
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private MeetPlanRunMapper meetPlanRunMapper;
 
     /**
      * 创建房间。
@@ -97,11 +103,6 @@ public class MeetRoomServiceImpl
                         ? 6
                         : request.getMaxMembers();
 
-        int minSubmittedMembers =
-                request.getMinSubmittedMembers() == null
-                        ? 2
-                        : request.getMinSubmittedMembers();
-
         LocalDateTime now = LocalDateTime.now();
 
         /*
@@ -121,7 +122,6 @@ public class MeetRoomServiceImpl
         room.setSearchRadiusMeter(searchRadiusMeter);
 
         room.setMaxMembers(maxMembers);
-        room.setMinSubmittedMembers(minSubmittedMembers);
         room.setVersion(0);
 
         room.setCreateTime(now);
@@ -379,18 +379,22 @@ public class MeetRoomServiceImpl
          * 一次性批量查询所有成员的用户信息（昵称 + 头像），
          * 避免逐个成员查库导致的 N+1 问题。
          */
-        Map<Long, User> userMap = memberEntities.stream()
-                .map(MeetMember::getUserId)
-                .collect(Collectors.toMap(
-                        Function.identity(),
-                        userId -> userMapper.selectById(userId),
-                        (a, b) -> a
-                ));
+        Map<Long, User> userMap = loadUsers(memberEntities);
 
         List<MeetMemberVO> memberVOList =
                 memberEntities.stream()
                         .map(m -> convertToMemberVO(m, userMap))
                         .toList();
+
+        com.hmdp.entity.MeetPlanRun latestRun =
+                meetPlanRunMapper.selectOne(
+                        new LambdaQueryWrapper<com.hmdp.entity.MeetPlanRun>()
+                                .eq(com.hmdp.entity.MeetPlanRun::getRoomId,
+                                        roomId)
+                                .orderByDesc(
+                                        com.hmdp.entity.MeetPlanRun::getId)
+                                .last("limit 1")
+                );
 
         MeetRoomDetailVO roomDetail =
                 MeetRoomDetailVO.builder()
@@ -407,15 +411,130 @@ public class MeetRoomServiceImpl
                         )
 
                         .maxMembers(room.getMaxMembers())
-                        .minSubmittedMembers(
-                                room.getMinSubmittedMembers()
-                        )
-
                         .createTime(room.getCreateTime())
+                        .lockedAt(room.getLockedAt())
+                        .confirmedProposalId(
+                                room.getConfirmedProposalId()
+                        )
+                        .latestPlanRunId(
+                                latestRun == null ? null : latestRun.getId()
+                        )
+                        .latestPlanRunStatus(
+                                latestRun == null ? null : latestRun.getStatus()
+                        )
                         .members(memberVOList)
                         .build();
 
         return Result.ok(roomDetail);
+    }
+
+    @Override
+    public Result listMyRooms() {
+        Long currentUserId = getCurrentUserId();
+        if (currentUserId == null) {
+            return Result.fail("用户未登录");
+        }
+
+        List<Long> roomIds = meetMemberMapper.selectList(
+                        new LambdaQueryWrapper<MeetMember>()
+                                .eq(MeetMember::getUserId, currentUserId)
+                                .eq(MeetMember::getStatus,
+                                        MeetMemberStatus.JOINED.name()))
+                .stream()
+                .map(MeetMember::getRoomId)
+                .distinct()
+                .toList();
+        if (roomIds.isEmpty()) {
+            return Result.ok(List.of());
+        }
+
+        List<MeetRoom> rooms = lambdaQuery()
+                .in(MeetRoom::getId, roomIds)
+                .orderByDesc(MeetRoom::getUpdateTime)
+                .list();
+        List<MeetMember> members = meetMemberMapper.selectList(
+                new LambdaQueryWrapper<MeetMember>()
+                        .in(MeetMember::getRoomId, roomIds)
+                        .eq(MeetMember::getStatus,
+                                MeetMemberStatus.JOINED.name())
+                        .orderByAsc(MeetMember::getJoinTime));
+        Map<Long, User> users = loadUsers(members);
+        Map<Long, List<MeetMember>> membersByRoom = members.stream()
+                .collect(Collectors.groupingBy(MeetMember::getRoomId));
+
+        List<MeetRoomSummaryVO> summaries = rooms.stream()
+                .map(room -> {
+                    List<MeetMemberVO> roomMembers = membersByRoom
+                            .getOrDefault(room.getId(), Collections.emptyList())
+                            .stream()
+                            .map(member -> convertToMemberVO(member, users))
+                            .toList();
+                    return MeetRoomSummaryVO.builder()
+                            .roomId(room.getId())
+                            .creatorId(room.getCreatorId())
+                            .title(room.getTitle())
+                            .inviteCode(room.getInviteCode())
+                            .status(room.getStatus())
+                            .maxMembers(room.getMaxMembers())
+                            .memberCount(roomMembers.size())
+                            .createTime(room.getCreateTime())
+                            .members(roomMembers)
+                            .build();
+                })
+                .toList();
+        return Result.ok(summaries);
+    }
+
+    private Map<Long, User> loadUsers(List<MeetMember> members) {
+        List<Long> userIds = members.stream()
+                .map(MeetMember::getUserId)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        return userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity(),
+                        (first, ignored) -> first));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result lockMembers(Long roomId) {
+        Long currentUserId = getCurrentUserId();
+        MeetRoom room = getById(roomId);
+
+        if (currentUserId == null) {
+            return Result.fail("用户未登录");
+        }
+        if (room == null) {
+            return Result.fail("聚会房间不存在");
+        }
+        if (!currentUserId.equals(room.getCreatorId())) {
+            return Result.fail("只有房主可以锁定成员名单");
+        }
+        if (!MeetRoomStatus.COLLECTING_PREFERENCES.name()
+                .equals(room.getStatus())) {
+            return Result.fail("当前房间状态不能锁定成员名单");
+        }
+
+        Long joinedCount = meetMemberMapper.selectCount(
+                new LambdaQueryWrapper<MeetMember>()
+                        .eq(MeetMember::getRoomId, roomId)
+                        .eq(MeetMember::getStatus,
+                                MeetMemberStatus.JOINED.name())
+        );
+        if (joinedCount < 2) {
+            return Result.fail("至少两名成员才能锁定名单");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        room.setStatus(MeetRoomStatus.MEMBERS_LOCKED.name());
+        room.setLockedAt(now);
+        room.setUpdateTime(now);
+        room.setVersion(room.getVersion() + 1);
+        updateById(room);
+        return Result.ok();
     }
 
     /**
@@ -493,19 +612,6 @@ public class MeetRoomServiceImpl
             return "房间人数必须在2到20人之间";
         }
 
-        int minSubmittedMembers =
-                request.getMinSubmittedMembers() == null
-                        ? 2
-                        : request.getMinSubmittedMembers();
-
-        if (minSubmittedMembers < 1) {
-            return "最少提交人数不能小于1";
-        }
-
-        if (minSubmittedMembers > maxMembers) {
-            return "最少提交人数不能大于房间最大人数";
-        }
-
         return null;
     }
 
@@ -517,10 +623,8 @@ public class MeetRoomServiceImpl
     private boolean isRoomJoinable(MeetRoom room) {
         String status = room.getStatus();
 
-        return MeetRoomStatus.COLLECTING_PREFERENCES
-                .name()
-                .equals(status)
-                || MeetRoomStatus.READY_TO_PLAN
+        return room.getLockedAt() == null
+                && MeetRoomStatus.COLLECTING_PREFERENCES
                 .name()
                 .equals(status);
     }

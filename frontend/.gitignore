@@ -13,3 +13,5 @@ target
 *.log
 .settings
 .project
+node_modules/
+dist/

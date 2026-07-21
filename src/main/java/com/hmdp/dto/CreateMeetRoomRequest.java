@@ -9,8 +9,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.math.BigDecimal;
-
 @Data
 public class CreateMeetRoomRequest {
 
@@ -32,7 +30,4 @@ public class CreateMeetRoomRequest {
     @Max(value = 20, message = "房间最多允许20人")
     private Integer maxMembers = 6;
 
-    @Min(value = 1, message = "最少提交人数不能小于1")
-    @Max(value = 20, message = "最少提交人数不能超过20")
-    private Integer minSubmittedMembers = 2;
 }

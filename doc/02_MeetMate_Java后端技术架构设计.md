@@ -5,6 +5,8 @@
 > 技术栈：Spring Boot 3、Java 17、MyBatis-Plus、MySQL、Redis、Redisson、RabbitMQ  
 > 文档版本：v1.2
 
+> **历史文档提示（2026-07-16）**：CONTEXT D10 已将 Agent 技术路线改为 Spring AI 2.0 Java 单体。本稿中的 Spring Boot 3、Python Agent Gateway、跨服务 Tool API 与 LangGraph resume 设计不再是当前实现依据；完成新一轮 grilling 后再整体修订。
+
 ---
 
 # 1. 文档目标

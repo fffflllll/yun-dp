@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/meet/rooms")
+@RequestMapping("/meet/rooms")
 @RequiredArgsConstructor
 public class MeetRoomController {
 
@@ -22,6 +22,11 @@ public class MeetRoomController {
             @Valid @RequestBody CreateMeetRoomRequest request) {
 
         return meetRoomService.createRoom(request);
+    }
+
+    @GetMapping
+    public Result listMyRooms() {
+        return meetRoomService.listMyRooms();
     }
 
     @PostMapping("/join-by-code")
@@ -36,5 +41,10 @@ public class MeetRoomController {
     @GetMapping("/{roomId}")
     public Result getRoomDetail(@PathVariable Long roomId) {
         return meetRoomService.getRoomDetail(roomId);
+    }
+
+    @PostMapping("/{roomId}/lock-members")
+    public Result lockMembers(@PathVariable Long roomId) {
+        return meetRoomService.lockMembers(roomId);
     }
 }

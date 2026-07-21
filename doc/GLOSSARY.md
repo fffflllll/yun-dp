@@ -2,11 +2,28 @@
 
 > grill-with-docs 会话沉淀的共享词汇，避免同词异义。
 
-- **HITL（Human-in-the-Loop）**：人类在环。Agent 遇到偏好冲突或信息缺失时不瞎编，而是挂起、请人回答、再继续。本项目的核心 wow。
-- **澄清（Clarification）**：Agent 判断信息不足/冲突时，请 Java 落一条 `tb_meet_clarification` 记录并把 AgentRun 切到 `WAITING_INPUT`，等用户作答。
-- **挂起/恢复（interrupt / resume）**：LangGraph 的中断机制。Python 用 `interrupt` 挂起图，Java 收到用户答案后调 `resume`，Python 用 `Command(resume=...)` 从原节点继续。恢复幂等键 = `clarificationId`。
-- **系统-of-record（System of Record）**：唯一业务事实来源 = Java。评分、状态、投票、最终方案都由 Java 独占；Python 无 DB、只做语义。
-- **可替换语义层**：Python Agent 整体可换（原 A1 主张）。**已在 D3 降级**：不再是项目目标，不为它做证明。
+- **聚会规划房间（Meet Room）**：围绕一次多人聚会收集成员与偏好、进行成员消息协作、发起规划并查看结果的协作空间。
+- **房间消息（Room Message）**：房间成员发送的持久化短消息；消息只服务于协作沟通，不直接成为规划事实或替代已确认偏好。
+- **规划 Agent（Planning Agent）**：运行在 Java 应用中的 Spring AI 组件，根据可信房间上下文和候选数据生成结构化聚会方案；它不是业务事实来源。
+- **AI Harness（Agent Harness）**：包围模型调用的确定性业务边界，负责提供可信输入、限制可用能力、校验建议、维护运行状态并记录安全轨迹；模型本身不拥有这些业务职责。
+- **受控 ReAct（Bounded ReAct）**：模型在一次规划尝试内按“请求工具 → 接收 Java 结果 → 继续组织方案”的有限循环工作；允许调用的工具、房间上下文和最终校验均由 Java 限定，不允许无限自主循环。
+- **Agent 执行计划（Agent Execution Plan）**：一次规划尝试必须完成的安全阶段清单，包括读取已确认偏好、查找可行餐厅、查看候选详情和校验方案草稿；它是可展示的工作计划，不是模型隐藏思维链。
+- **规划工具（Planning Tool）**：Java 提供给规划 Agent 的房间级只读能力。工具可以返回已确认偏好、候选餐厅和校验结果，但不能修改偏好、确认方案或写入最终业务状态。
+- **模型配置（Model Configuration）**：运行环境提供的 API Key、Base URL 和模型名，用于选择 OpenAI 兼容的 ChatModel；不属于代码或业务数据。
+- **餐厅候选（Restaurant Candidate）**：Java 根据房间位置、成员已确认偏好和 `tb_shop` / MeetMate 元数据召回并过滤出的可推荐餐厅；LLM 只能在候选集合内组织方案。
+- **聚会方案集（Plan Set）**：一次规划的完整输出，由 1 个首选方案和 2 个备选方案组成；每项方案都是可独立确认的时间、店铺、集合安排与取舍说明组合。_避免_：最终方案（成员确认前都只是建议）。
+- **已确认方案（Confirmed Plan）**：房主从方案集中选择、并经 Java 重新校验后写入的单项餐厅聚会安排；它才是本次房间的业务结果。
+- **规划事件（Plan Run Event）**：PlanRun 执行期间由 Java 通过 SSE 推送的进度、等待输入、完成或失败事件；事件用于展示，不取代数据库中的 Run 状态。
+- **可解释执行轨迹（Execution Trace）**：由固定阶段、脱敏事实和决策摘要组成的 Agent 工作记录；它解释系统做了哪些步骤和依据，不等同于模型的原始思维链。
+- **规划流程（PlanRun）**：房间级的一次规划业务流程；澄清或重试会增加执行尝试，但保持同一个用户可见的流程身份。
+- **执行尝试（PlanAttempt）**：PlanRun 的一次逻辑后台执行及其结果、耗时和错误记录；瞬时失败可在同一 Attempt 内按上限重新投递，成员澄清则创建新的 Attempt。
+- **规划事件（PlanEvent）**：绑定 PlanRun/PlanAttempt 的可重放安全事件，供 SSE 展示和审计，不是模型原始输出。
+- **偏好草稿（Preference Draft）**：成员输入的自然语言及 Spring AI 从中提取但尚未由本人确认的结构化结果；不得参与规划。
+- **已确认偏好（Confirmed Preference）**：成员本人检查并确认的结构化硬约束与软偏好，是规划 Agent 唯一可使用的成员偏好。
+- **锁定成员（Locked Member）**：房主锁定成员名单时仍在房间内、必须提交已确认偏好并参与本次规划的成员。锁定后不能再通过邀请码加入本次规划。
+- **定向澄清（Targeted Clarification）**：Java 确认硬约束导致可行候选不足以组成方案集后，向能够解除特定冲突的成员提出的一次结构化问题；回答后重新发起规划，而不是恢复原模型调用。
+- **系统-of-record（System of Record）**：唯一业务事实来源 = Java。用户、房间、偏好、候选、状态和最终落库结果均由 Java 管理，LLM 只生成可校验的建议。
+- **挂起/恢复（旧方案）**：原 LangGraph `interrupt / Command(resume=...)` 机制，已被 D10 移出当前 MVP。
 - **纵切（Vertical Slice）**：一条打通所有层的最薄端到端路径。本项目 MVP 纵切见 CONTEXT D7。
-- **wow**：简历/Demo 第一眼要让人记住的点。本项目 = 会主动问人的多人在环 Agent。
+- **wow**：简历/Demo 第一眼要让人记住的点；采用 Spring AI 后的具体展示方式尚未重新拍板。
 - **hmdp / yun-dp**：黑马点评教学项目，本项目的业务底座（GitHub: fffflllll/yun-dp）。

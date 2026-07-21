@@ -4,6 +4,8 @@
 > 技术栈：FastAPI、LangGraph、Pydantic、HTTP Client  
 > 文档版本：v1.2
 
+> **已被取代（2026-07-16）**：CONTEXT D10 已决定改用 Spring AI 2.0，并将规划 Agent 合并进 Java 应用。本稿仅保留为历史设计记录，不得继续作为 MVP 实现依据。
+
 ---
 
 # 1. 文档目标

@@ -3,3 +3,6 @@
 Dockerfile
 .dockerignore
 docker-compose.yml
+node_modules
+dist
+.DS_Store

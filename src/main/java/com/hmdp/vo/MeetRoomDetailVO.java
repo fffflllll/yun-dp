@@ -3,7 +3,6 @@ package com.hmdp.vo;
 import lombok.Builder;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,9 +28,15 @@ public class MeetRoomDetailVO {
 
     private Integer maxMembers;
 
-    private Integer minSubmittedMembers;
-
     private LocalDateTime createTime;
+
+    private LocalDateTime lockedAt;
+
+    private Long confirmedProposalId;
+
+    private Long latestPlanRunId;
+
+    private String latestPlanRunStatus;
 
     private List<MeetMemberVO> members;
 }

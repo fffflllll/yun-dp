@@ -1,6 +1,6 @@
 package com.hmdp.config;
 import org.springframework.amqp.core.*;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +19,16 @@ public class QueueConfig {
     public static final String QUEUE_A = "QA";
     //死信队列名称
     public static final String DEAD_LETTER_QUEUE_D = "QD";
+    public static final String MEET_PLAN_EXCHANGE = "meet.plan.exchange";
+    // v1 队列在旧环境中没有死信参数，RabbitMQ 不允许原地修改队列参数。
+    public static final String MEET_PLAN_QUEUE = "meet.plan.execute.v2";
+    public static final String MEET_PLAN_ROUTING_KEY = "meet.plan.execute";
+    public static final String MEET_PLAN_DEAD_LETTER_EXCHANGE =
+            "meet.plan.dead-letter.exchange";
+    public static final String MEET_PLAN_DEAD_LETTER_QUEUE =
+            "meet.plan.dead-letter";
+    public static final String MEET_PLAN_DEAD_LETTER_ROUTING_KEY =
+            "meet.plan.dead-letter";
 
 
     /**
@@ -91,15 +101,58 @@ public class QueueConfig {
     ){
         return BindingBuilder.bind(queueD).to(yExchange).with("YD");
     }
+
+    @Bean
+    public DirectExchange meetPlanExchange() {
+        return new DirectExchange(MEET_PLAN_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue meetPlanQueue() {
+        return QueueBuilder.durable(MEET_PLAN_QUEUE)
+                .deadLetterExchange(MEET_PLAN_DEAD_LETTER_EXCHANGE)
+                .deadLetterRoutingKey(MEET_PLAN_DEAD_LETTER_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Binding meetPlanBinding(
+            @Qualifier("meetPlanQueue") Queue queue,
+            @Qualifier("meetPlanExchange") DirectExchange exchange) {
+        return BindingBuilder.bind(queue)
+                .to(exchange)
+                .with(MEET_PLAN_ROUTING_KEY);
+    }
+
+    @Bean
+    public DirectExchange meetPlanDeadLetterExchange() {
+        return new DirectExchange(
+                MEET_PLAN_DEAD_LETTER_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue meetPlanDeadLetterQueue() {
+        return QueueBuilder.durable(MEET_PLAN_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    public Binding meetPlanDeadLetterBinding(
+            @Qualifier("meetPlanDeadLetterQueue") Queue queue,
+            @Qualifier("meetPlanDeadLetterExchange")
+            DirectExchange exchange) {
+        return BindingBuilder.bind(queue)
+                .to(exchange)
+                .with(MEET_PLAN_DEAD_LETTER_ROUTING_KEY);
+    }
     /**
      * 消息转换器
      * @return
      */
     @Bean
     public MessageConverter messageConverter(){
-        return new Jackson2JsonMessageConverter();
+        // Spring Boot 4 默认使用 Jackson 3；避免引入仅为消息转换器服务的 Jackson 2。
+        return new JacksonJsonMessageConverter();
     }
 
 
 }
-

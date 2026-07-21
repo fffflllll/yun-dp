@@ -5,11 +5,25 @@ spring:
   application:
     name: hmdp
 
+  ai:
+    openai:
+      api-key: ${MEETMATE_AI_API_KEY:not-configured}
+      base-url: ${MEETMATE_AI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${MEETMATE_AI_MODEL:gpt-4.1-mini}
+          temperature: 0.2
+
   # RabbitMQ 配置
   rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple: # 对应 SimpleRabbitListenerContainerFactory
         acknowledge-mode: auto # 自动确认：方法正常执行完发Ack，抛异常发Nack
+        default-requeue-rejected: false
         retry:
           enabled: true # 【关键】开启 Spring 内部的本地重试
           initial-interval: 1000ms # 第一次失败等 1秒
@@ -18,15 +32,15 @@ spring:
           stateless: true # true代表不开启事务(性能好)，false代表开启事务
     host: localhost
     port: 5672
-    username: root
-    password: 123321
+    username: ${RABBITMQ_USERNAME:root}
+    password: ${RABBITMQ_PASSWORD:123321}
 
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/hmdp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:123}
 
   # Redis 配置 (重点修改部分)
   data:
@@ -47,12 +61,31 @@ spring:
 mybatis-plus:
   type-aliases-package: com.hmdp.entity
 
+meetmate:
+  ai:
+    enabled: ${MEETMATE_AI_ENABLED:false}
+    prompt-version: v2
+    request-timeout: ${MEETMATE_AI_REQUEST_TIMEOUT:45s}
+    max-completion-tokens: ${MEETMATE_AI_MAX_COMPLETION_TOKENS:1200}
+    max-model-retries: ${MEETMATE_AI_MAX_MODEL_RETRIES:1}
+    max-tool-calls: ${MEETMATE_AI_MAX_TOOL_CALLS:8}
+  plan:
+    recovery-interval: ${MEETMATE_PLAN_RECOVERY_INTERVAL:30s}
+    dispatch-interval: ${MEETMATE_PLAN_DISPATCH_INTERVAL:1s}
+    running-timeout-ms: ${MEETMATE_PLAN_RUNNING_TIMEOUT_MS:180000}
+    max-execution-attempts: ${MEETMATE_PLAN_MAX_EXECUTION_ATTEMPTS:2}
+
+security:
+  shop:
+    admin-user-ids: ${SHOP_ADMIN_USER_IDS:}
+
 logging:
   level:
     com.hmdp: debug
+    com.hmdp.mapper.MeetPlanAttemptMapper: info
   # 【新增】指定日志文件在容器内的生成路径
   file:
-    name: /var/logs/hmdp/app.log  # 或者只配置 path: /var/logs/hmdp
+    name: ${MEETMATE_LOG_FILE:logs/hmdp/app.log}
   # (可选) 设置日志滚动策略，防止一个文件无限大
   logback:
     rollingpolicy:

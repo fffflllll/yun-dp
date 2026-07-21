@@ -36,6 +36,7 @@ services:
     volumes:
       # 首次启动自动执行建表/插数据（只在库为空时跑一次）
       - ./src/main/resources/db/hmdp.sql:/docker-entrypoint-initdb.d/hmdp.sql:ro
+      - ./src/main/resources/db/meetmate-migration.sql:/docker-entrypoint-initdb.d/02-meetmate.sql:ro
       - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123"]

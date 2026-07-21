@@ -3,10 +3,12 @@ package com.hmdp.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hmdp.config.ShopAdminProperties;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +28,9 @@ public class ShopController {
     @Resource
     public IShopService shopService;
 
+    @Resource
+    private ShopAdminProperties shopAdminProperties;
+
     /**
      * 根据id查询商铺信息
      *
@@ -44,6 +49,9 @@ public class ShopController {
      */
     @PostMapping
     public Result saveShop(@RequestBody Shop shop) {
+        if (!canWriteShop()) {
+            return Result.fail("只有配置的商铺管理员可以新增商铺");
+        }
         // 写入数据库
         shopService.save(shop);
         // 返回店铺id
@@ -57,6 +65,9 @@ public class ShopController {
      */
     @PutMapping
     public Result updateShop(@RequestBody Shop shop) {
+        if (!canWriteShop()) {
+            return Result.fail("只有配置的商铺管理员可以修改商铺");
+        }
         // 写入数据库
 
         return shopService.update(shop);
@@ -95,5 +106,10 @@ public class ShopController {
                 .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
         // 返回数据
         return Result.ok(page.getRecords());
+    }
+
+    private boolean canWriteShop() {
+        return UserHolder.getUser() != null
+                && shopAdminProperties.canWrite(UserHolder.getUser().getId());
     }
 }

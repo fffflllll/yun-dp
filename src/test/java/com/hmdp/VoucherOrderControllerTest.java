@@ -2,7 +2,6 @@ package com.hmdp;
 
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.thread.ThreadUtil;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.User;
@@ -11,13 +10,15 @@ import jakarta.annotation.Resource;
 import lombok.Builder;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -41,11 +42,12 @@ class VoucherOrderControllerTest {
     private IUserService userService;
 
     @Resource
-    private ObjectMapper mapper;
+    private JsonMapper mapper;
 
 
 
     @Test
+    @Disabled("手工生成压测 Token，不属于自动化测试套件")
     @SneakyThrows
     @DisplayName("登录1000个用户，并输出到文件中")
     void login() {
@@ -79,9 +81,10 @@ class VoucherOrderControllerTest {
                     Assert.isTrue(result.getSuccess(), String.format("获取“%s”手机号的token失败,json为“%s”", phone, json));
                     String token = result.getData().toString();
                     tokenList.add(token);
-                    countDownLatch.countDown();
                 } catch (Exception e) {
                     e.printStackTrace();
+                } finally {
+                    countDownLatch.countDown();
                 }
             });
         });

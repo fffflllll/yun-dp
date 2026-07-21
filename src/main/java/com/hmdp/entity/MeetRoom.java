@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -31,9 +30,11 @@ public class MeetRoom {
 
     private Integer maxMembers;
 
-    private Integer minSubmittedMembers;
-
     private Integer version;
+
+    private LocalDateTime lockedAt;
+
+    private Long confirmedProposalId;
 
     private LocalDateTime createTime;
 

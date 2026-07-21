@@ -2,11 +2,19 @@
 let commonURL = "/api";
 // 设置后台服务地址
 axios.defaults.baseURL = commonURL;
-axios.defaults.timeout = 2000;
+axios.defaults.timeout = 15000;
 // request拦截器，将用户token放入头中
 let token = sessionStorage.getItem("token");
 axios.interceptors.request.use(
   config => {
+    // 兼容旧页面缓存：baseURL 已包含 /api 时，避免再次拼接成 /api/api/...
+    if (config.baseURL === "/api" && config.url) {
+      if (config.url === "/api") {
+        config.url = "/";
+      } else if (config.url.indexOf("/api/") === 0) {
+        config.url = config.url.substring(4);
+      }
+    }
     if(token) config.headers['authorization'] = token
     return config
   },
@@ -23,15 +31,21 @@ axios.interceptors.response.use(function (response) {
   return response.data;
 }, function (error) {
   // 一般是服务端异常或者网络异常
-  console.log(error)
-  if(error.response.status == 401){
+  console.log('[axios error]', error.message || error, error.code || '');
+  if (error && error.response && error.response.status == 401){
     // 未登录，跳转
     setTimeout(() => {
       location.href = "/login.html"
     }, 200);
     return Promise.reject("请先登录");
   }
-  return Promise.reject("服务器异常");
+  var msg = "服务器异常";
+  if (!error || !error.response) {
+    msg = "网络连接失败，请确认后端服务已启动（localhost:8081）且通过 localhost:8080 访问";
+  } else if (error.response.data && error.response.data.errorMsg) {
+    msg = error.response.data.errorMsg;
+  }
+  return Promise.reject(msg);
 });
 axios.defaults.paramsSerializer = function(params) {
   let p = "";
